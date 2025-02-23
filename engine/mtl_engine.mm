@@ -16,7 +16,7 @@ void MTLEngine::init(){
     initDevice();
     initWindow();
     
-    createSquare();
+    createCube();
     createDefaultLibrary();
     createCommandQueue();
     createRenderPipeline();
@@ -82,23 +82,68 @@ void MTLEngine::initWindow() {
 
 
 
-void MTLEngine::createSquare() {
-    VertexData squareVertices[] {
-        {{-0.5, -0.5,  0.5, 1.0f}, {0.0f, 0.0f}},
-        {{-0.5,  0.5,  0.5, 1.0f}, {0.0f, 1.0f}},
-        {{ 0.5,  0.5,  0.5, 1.0f}, {1.0f, 1.0f}},
-        {{-0.5, -0.5,  0.5, 1.0f}, {0.0f, 0.0f}},
-        {{ 0.5,  0.5,  0.5, 1.0f}, {1.0f, 1.0f}},
-        {{ 0.5, -0.5,  0.5, 1.0f}, {1.0f, 0.0f}}
-    };
-    
-    squareVertexBuffer = metalDevice->newBuffer(&squareVertices, sizeof(squareVertices), MTL::ResourceStorageModeShared);
+void MTLEngine::createCube() {
+    // Cube for use in a right-handed coordinate system with triangle faces
+        // specified with a Counter-Clockwise winding order.
+    VertexData cubeVertices[] = {
+            // Front face
+            {{-0.5, -0.5, 0.5, 1.0}, {0.0, 0.0}},
+            {{0.5, -0.5, 0.5, 1.0}, {1.0, 0.0}},
+            {{0.5, 0.5, 0.5, 1.0}, {1.0, 1.0}},
+            {{0.5, 0.5, 0.5, 1.0}, {1.0, 1.0}},
+            {{-0.5, 0.5, 0.5, 1.0}, {0.0, 1.0}},
+            {{-0.5, -0.5, 0.5, 1.0}, {0.0, 0.0}},
+
+            // Back face
+            {{0.5, -0.5, -0.5, 1.0}, {0.0, 0.0}},
+            {{-0.5, -0.5, -0.5, 1.0}, {1.0, 0.0}},
+            {{-0.5, 0.5, -0.5, 1.0}, {1.0, 1.0}},
+            {{-0.5, 0.5, -0.5, 1.0}, {1.0, 1.0}},
+            {{0.5, 0.5, -0.5, 1.0}, {0.0, 1.0}},
+            {{0.5, -0.5, -0.5, 1.0}, {0.0, 0.0}},
+
+            // Top face
+            {{-0.5, 0.5, 0.5, 1.0}, {0.0, 0.0}},
+            {{0.5, 0.5, 0.5, 1.0}, {1.0, 0.0}},
+            {{0.5, 0.5, -0.5, 1.0}, {1.0, 1.0}},
+            {{0.5, 0.5, -0.5, 1.0}, {1.0, 1.0}},
+            {{-0.5, 0.5, -0.5, 1.0}, {0.0, 1.0}},
+            {{-0.5, 0.5, 0.5, 1.0}, {0.0, 0.0}},
+
+            // Bottom face
+            {{-0.5, -0.5, -0.5, 1.0}, {0.0, 0.0}},
+            {{0.5, -0.5, -0.5, 1.0}, {1.0, 0.0}},
+            {{0.5, -0.5, 0.5, 1.0}, {1.0, 1.0}},
+            {{0.5, -0.5, 0.5, 1.0}, {1.0, 1.0}},
+            {{-0.5, -0.5, 0.5, 1.0}, {0.0, 1.0}},
+            {{-0.5, -0.5, -0.5, 1.0}, {0.0, 0.0}},
+
+            // Left face
+            {{-0.5, -0.5, -0.5, 1.0}, {0.0, 0.0}},
+            {{-0.5, -0.5, 0.5, 1.0}, {1.0, 0.0}},
+            {{-0.5, 0.5, 0.5, 1.0}, {1.0, 1.0}},
+            {{-0.5, 0.5, 0.5, 1.0}, {1.0, 1.0}},
+            {{-0.5, 0.5, -0.5, 1.0}, {0.0, 1.0}},
+            {{-0.5, -0.5, -0.5, 1.0}, {0.0, 0.0}},
+
+            // Right face
+            {{0.5, -0.5, 0.5, 1.0}, {0.0, 0.0}},
+            {{0.5, -0.5, -0.5, 1.0}, {1.0, 0.0}},
+            {{0.5, 0.5, -0.5, 1.0}, {1.0, 1.0}},
+            {{0.5, 0.5, -0.5, 1.0}, {1.0, 1.0}},
+            {{0.5, 0.5, 0.5, 1.0}, {0.0, 1.0}},
+            {{0.5, -0.5, 0.5, 1.0}, {0.0, 0.0}},
+        };
+
+        cubeVertexBuffer = metalDevice->newBuffer(&cubeVertices, sizeof(cubeVertices), MTL::ResourceStorageModeShared);
+
+        transformationBuffer = metalDevice->newBuffer(sizeof(TransformationData), MTL::ResourceStorageModeShared);
 
     // Make sure to change working directory to this project
     // directory via Product -> Scheme -> Edit Scheme -> Run -> Options
     grassTexture = new Texture("assets/big_creeper_face.png", metalDevice);
     
-    printf("square created.\n");
+    printf("cube created.\n");
 }
 
 
@@ -192,11 +237,42 @@ void MTLEngine::sendRenderCommand() {
 void MTLEngine::encodeRenderCommand(MTL::RenderCommandEncoder* renderCommandEncoder) {
     printf("Encoding render command.\t");
     
+    // Moves the Cube 2 units down the negative Z-axis
+    matrix_float4x4 translationMatrix = matrix4x4_translation(0, 0,-1.0);
+
+    float angleInDegrees = glfwGetTime()/2.0 * 45;
+    float angleInRadians = angleInDegrees * M_PI / 180.0f;
+    matrix_float4x4 rotationMatrix = matrix4x4_rotation(angleInRadians, 0.0, 1.0, 0.0);
+
+    matrix_float4x4 modelMatrix = simd_mul(translationMatrix, rotationMatrix);
+
+    simd::float3 R = simd::float3 {1, 0, 0}; // Unit-Right
+    simd::float3 U = simd::float3 {0, 1, 0}; // Unit-Up
+    simd::float3 F = simd::float3 {0, 0,-1}; // Unit-Forward
+    simd::float3 P = simd::float3 {0, 0, 1}; // Camera Position in World Space
+
+    matrix_float4x4 viewMatrix = matrix_make_rows(R.x, R.y, R.z, dot(-R, P),
+                                                  U.x, U.y, U.z, dot(-U, P),
+                                                 -F.x,-F.y,-F.z, dot( F, P),
+                                                  0, 0, 0, 1);
+
+    float aspectRatio = (metalLayer.frame.size.width / metalLayer.frame.size.height);
+    float fov = 90 * (M_PI / 180.0f);
+    float nearZ = 0.1f;
+    float farZ = 100.0f;
+
+    matrix_float4x4 perspectiveMatrix = matrix_perspective_right_hand(fov, aspectRatio, nearZ, farZ);
+
+    TransformationData transformationData = { modelMatrix, viewMatrix, perspectiveMatrix };
+    memcpy(transformationBuffer->contents(), &transformationData, sizeof(transformationData));
+
+    
     renderCommandEncoder->setRenderPipelineState(metalRenderPSO);
-    renderCommandEncoder->setVertexBuffer(squareVertexBuffer, 0, 0);
+    renderCommandEncoder->setVertexBuffer(cubeVertexBuffer, 0, 0);
+    renderCommandEncoder->setVertexBuffer(transformationBuffer, 0, 1);
     MTL::PrimitiveType typeTriangle = MTL::PrimitiveTypeTriangle;
     NS::UInteger vertexStart = 0;
-    NS::UInteger vertexCount = 6;
+    NS::UInteger vertexCount = 36;
     renderCommandEncoder->setFragmentTexture(grassTexture->texture, 0);
     renderCommandEncoder->drawPrimitives(typeTriangle, vertexStart, vertexCount);
 

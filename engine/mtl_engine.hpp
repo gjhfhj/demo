@@ -27,6 +27,8 @@
 
 #include <filesystem>
 
+#include "AAPLMathUtilities.h"
+
 
 class MTLEngine {
 public:
@@ -38,7 +40,7 @@ private:
     void initDevice();
     void initWindow();
 
-    void createSquare();
+    void createCube();
     void createDefaultLibrary();
     void createCommandQueue();
     void createRenderPipeline();
@@ -61,7 +63,8 @@ private:
     MTL::CommandBuffer* metalCommandBuffer;
     MTL::RenderPipelineState* metalRenderPSO;
     
-    MTL::Buffer* squareVertexBuffer;
+    MTL::Buffer* cubeVertexBuffer;
+    MTL::Buffer* transformationBuffer;
 
     Texture* grassTexture;
 };
