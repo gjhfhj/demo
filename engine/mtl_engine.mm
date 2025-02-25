@@ -12,7 +12,7 @@
 using std::cerr;
 
 void MTLEngine::init(){
-    printf("-------------------------------Engine to init--------------------------------\n");
+    printf("------------------------------Engine to init----------------------------------\n");
     initDevice();
     initWindow();
     
@@ -21,7 +21,7 @@ void MTLEngine::init(){
     createCommandQueue();
     createRenderPipeline();
     
-    printf("-------------------------Engine inited(the next: run)-------------------------\n");
+    printf("------------------------Engine inited(the next: run)--------------------------\n");
 }
 
 void MTLEngine::run(){
@@ -40,12 +40,12 @@ void MTLEngine::run(){
 
 
 void MTLEngine::cleanup(){
-    printf("-------------------------------Cleanup the memory------------------------------\n");
+    printf("-----------------------------Cleanup the memory--------------------------------\n");
     
     glfwTerminate();
     metalDevice->release();
     
-    printf("--------------------------------------Done-------------------------------------\n");
+    printf("----------------------------------Done-----------------------------------------\n");
 }
 
 void MTLEngine::initDevice(){
@@ -66,6 +66,8 @@ void MTLEngine::initWindow() {
     
     glfwSetWindowUserPointer(glfwWindow, this);
     glfwSetFramebufferSizeCallback(glfwWindow, frameBufferSizeCallback);
+    // 设置键盘回调函数
+    glfwSetKeyCallback(glfwWindow, keyCallback);  // 这里注册了键盘回调函数
     int width, height;
     glfwGetFramebufferSize(glfwWindow, &width, &height);
     
@@ -83,20 +85,23 @@ void MTLEngine::initWindow() {
 
 
 void MTLEngine::createSquare() {
+    // Make sure to change working directory to this project
+    // directory via Product -> Scheme -> Edit Scheme -> Run -> Options
+    myTexture = new Texture("assets/porch.png", metalDevice);
+    
+    float ratio = (float)myTexture->width / myTexture->height;  //两个整数相除会执行整数除法。
+    //默认ratio处为1，但为了匹配texture的比例，为此适配
     VertexData squareVertices[] {
-        {{-0.5, -0.5,  0.5, 1.0f}, {0.0f, 0.0f}},
-        {{-0.5,  0.5,  0.5, 1.0f}, {0.0f, 1.0f}},
-        {{ 0.5,  0.5,  0.5, 1.0f}, {1.0f, 1.0f}},
-        {{-0.5, -0.5,  0.5, 1.0f}, {0.0f, 0.0f}},
-        {{ 0.5,  0.5,  0.5, 1.0f}, {1.0f, 1.0f}},
-        {{ 0.5, -0.5,  0.5, 1.0f}, {1.0f, 0.0f}}
+        {{-ratio, -1.0,  0.0, 1.0f}, {0.0f, 0.0f}},   // leftbottom
+        {{-ratio,  1.0,  0.0, 1.0f}, {0.0f, 1.0f}},   // lefttop
+        {{ ratio,  1.0,  0.0, 1.0f}, {1.0f, 1.0f}},   // righttop
+        {{-ratio, -1.0,  0.0, 1.0f}, {0.0f, 0.0f}},   // leftbottom
+        {{ ratio,  1.0,  0.0, 1.0f}, {1.0f, 1.0f}},   // righttop
+        {{ ratio, -1.0,  0.0, 1.0f}, {1.0f, 0.0f}}    // rightbottom
     };
     
     squareVertexBuffer = metalDevice->newBuffer(&squareVertices, sizeof(squareVertices), MTL::ResourceStorageModeShared);
-
-    // Make sure to change working directory to this project
-    // directory via Product -> Scheme -> Edit Scheme -> Run -> Options
-    grassTexture = new Texture("assets/big_creeper_face.png", metalDevice);
+    transformationBuffer = metalDevice->newBuffer(sizeof(TransformationData), MTL::ResourceStorageModeShared);
     
     printf("square created.\n");
 }
@@ -165,42 +170,115 @@ void MTLEngine::draw(){
 }
 
 void MTLEngine::sendRenderCommand() {
-    printf("Sending render command.\t");
+    printf("\n\tSending render command:\n");
     
     metalCommandBuffer = metalCommandQueue->commandBuffer();
+    
+    printf("\t\t* created metalCommandBuffer.\n");
 
     MTL::RenderPassDescriptor* renderPassDescriptor = MTL::RenderPassDescriptor::alloc()->init();
-    MTL::RenderPassColorAttachmentDescriptor* cd = renderPassDescriptor->colorAttachments()->object(0);
-    cd->setTexture(metalDrawable->texture());
-    cd->setLoadAction(MTL::LoadActionClear);
-    cd->setClearColor(MTL::ClearColor(41.0f/255.0f, 42.0f/255.0f, 48.0f/255.0f, 1.0));
+    
+    printf("\t\t* created renderPassDescriptor.\n");
+    
+    MTL::RenderPassColorAttachmentDescriptor* cd = renderPassDescriptor->colorAttachments()->object(0); //创建渲染通道描述符，定义渲染目标。
+    
+    printf("\t\t* 创建渲染通道描述符，定义渲染目标.\n");
+    
+    cd->setTexture(metalDrawable->texture());   //设置渲染目标为 metalDrawable 的纹理。
+    
+    printf("\t\t* 设置渲染目标为 metalDrawable 的纹理.\n");
+    
+    cd->setLoadAction(MTL::LoadActionClear);    //设置加载操作为清除。
+    
+    printf("\t\t* 设置加载操作为清除.\n");
+    
+    cd->setClearColor(MTL::ClearColor(173.0f/255.0f, 214.0f/255.0f, 255.0f/255.0f, 1.0));  //设置清除颜色。
+    
+    printf("\t\t* 设置清除颜色.\n");
+    
     cd->setStoreAction(MTL::StoreActionStore);
+    
+    printf("\t\t* StoreActionStore.\n");
 
-    MTL::RenderCommandEncoder* renderCommandEncoder = metalCommandBuffer->renderCommandEncoder(renderPassDescriptor);
-    encodeRenderCommand(renderCommandEncoder);
-    renderCommandEncoder->endEncoding();
+    MTL::RenderCommandEncoder* renderCommandEncoder = metalCommandBuffer->renderCommandEncoder(renderPassDescriptor);   //创建渲染命令编码器。
+    
+    printf("\t\t* 创建渲染命令编码器.\n");
+    
+    encodeRenderCommand(renderCommandEncoder);  //编码具体的渲染命令。
+    
+    printf("（编码完具体的渲染命令）\n");
+    
+    renderCommandEncoder->endEncoding();    //结束编码。
+    
+    printf("\t\t* endEncoding\n");
 
-    metalCommandBuffer->presentDrawable(metalDrawable);
-    metalCommandBuffer->commit();
-    metalCommandBuffer->waitUntilCompleted();
+    metalCommandBuffer->presentDrawable(metalDrawable); //将渲染结果显示到屏幕。
+    
+    printf("\t\t* presented Drawable（将渲染结果显示到屏幕）\n");
+    
+    metalCommandBuffer->commit();   //提交命令缓冲区。
+    
+    printf("\t\t* committed commandBuffer（提交命令缓冲区）\n");
+    
+    metalCommandBuffer->waitUntilCompleted();   //等待渲染完成（调试用，正式应用中可移除）。
+    
 
     renderPassDescriptor->release();
     
-    printf("sended\n");
+    printf("\t\t* renderPassDescriptor released\t\n");
 }
 
 void MTLEngine::encodeRenderCommand(MTL::RenderCommandEncoder* renderCommandEncoder) {
-    printf("Encoding render command.\t");
+    printf("\tEncoding render command:\n");
+        
+    matrix_float4x4 translationMatrix = matrix4x4_translation(0,0,-2.0);
     
+    printf("\t\t* created translationMatrix\n");
+    
+    float angle = -1.1;
+    matrix_float4x4 rotationMatrix = matrix4x4_rotation(angle, 1, 0, 0);
+    
+    matrix_float4x4 modelMatrix = simd_mul(translationMatrix, rotationMatrix);
+    
+    simd::float3 R = simd::float3 {1, 0, 0}; // Unit-Right
+    simd::float3 U = simd::float3 {0, 1, 0}; // Unit-Up
+    simd::float3 F = simd::float3 {0, 0,-1}; // Unit-Forward
+    simd::float3 P = simd::float3 {0, 1, 1}; // Camera Position in World Space setting the view(camera) position
+    
+    printf("\t\t* created R U F P\n");
+
+    matrix_float4x4 viewMatrix = matrix_make_rows(R.x, R.y, R.z, dot(-R, P),
+                                                  U.x, U.y, U.z, dot(-U, P),
+                                                 -F.x,-F.y,-F.z, dot( F, P),
+                                                  0, 0, 0, 1);
+    
+    printf("\t\t* created viewMatrix\n");
+    
+    matrix_float4x4 metalMatrix = matrix_make_rows(1, 0, 0, 0,
+                                                   0, 1, 0, 0,
+                                                   0, 0,-0.5,-0.5,
+                                                   0, 0,-1, 0);
+    
+    printf("\t\t* created metalMatrix\n");
+
+    TransformationData transformationData = { modelMatrix, viewMatrix, metalMatrix };
+    
+    printf("\t\t* done transformationData\n");
+    
+    memcpy(transformationBuffer->contents(), &transformationData, sizeof(transformationData));
+    
+    printf("\t\t* done memcpy\n");
+
     renderCommandEncoder->setRenderPipelineState(metalRenderPSO);
     renderCommandEncoder->setVertexBuffer(squareVertexBuffer, 0, 0);
+    renderCommandEncoder->setVertexBuffer(transformationBuffer, 0, 1);
     MTL::PrimitiveType typeTriangle = MTL::PrimitiveTypeTriangle;
     NS::UInteger vertexStart = 0;
     NS::UInteger vertexCount = 6;
-    renderCommandEncoder->setFragmentTexture(grassTexture->texture, 0);
+    renderCommandEncoder->setFragmentTexture(myTexture->texture, 0);
     renderCommandEncoder->drawPrimitives(typeTriangle, vertexStart, vertexCount);
 
-    printf("Encoded\t");
+    printf("Encoded");
 }
 
 
@@ -211,5 +289,15 @@ void MTLEngine:: frameBufferSizeCallback(GLFWwindow* window, int width, int heig
 
 void MTLEngine::resizeFrameBuffer(int width, int height){
     metalLayer.drawableSize = CGSizeMake(width, height);
+}
+
+void MTLEngine::keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+    if (action == GLFW_PRESS) {
+        if (key == GLFW_KEY_Q) {
+            // 按下 Q 键时，退出程序
+            printf("Q key pressed, exiting...\n");
+            glfwSetWindowShouldClose(window, GLFW_TRUE);  // 设置窗口关闭标志
+        }
+    }
 }
 

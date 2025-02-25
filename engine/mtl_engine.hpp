@@ -27,6 +27,8 @@
 
 #include <filesystem>
 
+#include "AAPLMathUtilities.h"
+
 
 class MTLEngine {
 public:
@@ -49,6 +51,7 @@ private:
 
     static void frameBufferSizeCallback(GLFWwindow *window, int width, int height); //调整窗口大小时，
     void resizeFrameBuffer(int width, int height);                                  //解决metalLayer.drawableSize 的分辨率不会更新的问题
+    static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
     
     MTL::Device* metalDevice;
     GLFWwindow* glfwWindow;
@@ -62,6 +65,7 @@ private:
     MTL::RenderPipelineState* metalRenderPSO;
     
     MTL::Buffer* squareVertexBuffer;
-
-    Texture* grassTexture;
+    MTL::Buffer* transformationBuffer;
+    
+    Texture* myTexture;
 };
