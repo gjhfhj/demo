@@ -15,7 +15,7 @@ void MTLEngine::init(){
     printf("------------------------------Engine to init----------------------------------\n");
     initDevice();
     initWindow();
-    
+    camera = new Camera();
     createSquare();
     createDefaultLibrary();
     createCommandQueue();
@@ -68,6 +68,8 @@ void MTLEngine::initWindow() {
     glfwSetFramebufferSizeCallback(glfwWindow, frameBufferSizeCallback);
     // 设置键盘回调函数
     glfwSetKeyCallback(glfwWindow, keyCallback);  // 这里注册了键盘回调函数
+    glfwSetCursorPosCallback(glfwWindow, mouseCallback);
+    glfwSetInputMode(glfwWindow, GLFW_CURSOR, GLFW_CURSOR_DISABLED);    //隐藏光标
     int width, height;
     glfwGetFramebufferSize(glfwWindow, &width, &height);
     
@@ -240,24 +242,11 @@ void MTLEngine::encodeRenderCommand(MTL::RenderCommandEncoder* renderCommandEnco
     
     matrix_float4x4 modelMatrix = simd_mul(translationMatrix, rotationMatrix);
     
-    simd::float3 R = simd::float3 {1, 0, 0}; // Unit-Right
-    simd::float3 U = simd::float3 {0, 1, 0}; // Unit-Up
-    simd::float3 F = simd::float3 {0, 0,-1}; // Unit-Forward
-    simd::float3 P = simd::float3 {0, 1, 1}; // Camera Position in World Space setting the view(camera) position
-    
-    printf("\t\t* created R U F P\n");
-
-    matrix_float4x4 viewMatrix = matrix_make_rows(R.x, R.y, R.z, dot(-R, P),
-                                                  U.x, U.y, U.z, dot(-U, P),
-                                                 -F.x,-F.y,-F.z, dot( F, P),
-                                                  0, 0, 0, 1);
+    matrix_float4x4 viewMatrix = camera->getViewMatrix();
     
     printf("\t\t* created viewMatrix\n");
     
-    matrix_float4x4 metalMatrix = matrix_make_rows(1, 0, 0, 0,
-                                                   0, 1, 0, 0,
-                                                   0, 0,-0.5,-0.5,
-                                                   0, 0,-1, 0);
+    matrix_float4x4 metalMatrix = camera->getMetalMatrix();
     
     printf("\t\t* created metalMatrix\n");
 
@@ -300,4 +289,12 @@ void MTLEngine::keyCallback(GLFWwindow* window, int key, int scancode, int actio
         }
     }
 }
+
+void MTLEngine::mouseCallback(GLFWwindow* window, double xpos, double ypos) {
+    MTLEngine* engine = static_cast<MTLEngine*>(glfwGetWindowUserPointer(window));
+    if (engine && engine->camera) {
+        engine->camera->updateOrientation(xpos, ypos);
+    }
+}
+
 
