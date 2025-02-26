@@ -17,7 +17,7 @@ float Camera::pitch = 0.0f;
 Camera::Camera() : R(simd::float3{1, 0, 0}),
                    U(simd::float3{0, 1, 0}),
                    F(simd::float3{0, 0, -1}),
-                   P(simd::float3{0, 1, 1}) {}
+                   P(simd::float3{0, 0, 1}) {}
 
 simd::float4x4 Camera::getViewMatrix() const {
     return matrix_make_rows(R.x, R.y, R.z, simd::dot(-R, P),
@@ -32,10 +32,20 @@ simd::float4x4 Camera::getMetalMatrix() const {
                             0, 0, -0.5, -0.5,
                             0, 0, -1, 0);
 }
+void Camera::setP(simd::float3 vector){ P = vector;}
+void Camera::setF(simd::float3 vector){ F = vector;}
+void Camera::setU(simd::float3 vector){ U = vector;}
+void Camera::setR(simd::float3 vector){ R = vector;}
+simd::float3 Camera::getP(){return P;}
+simd::float3 Camera::getF(){return F;}
+simd::float3 Camera::getU(){return U;}
+simd::float3 Camera::getR(){return R;}
+float Camera::getLastX(){return lastX;}
+float Camera::getLastY(){return lastY;}
 
 void Camera::updateOrientation(double xpos, double ypos) {
-    float xoffset = xpos - lastX;
-    float yoffset = lastY - ypos;
+    float xoffset = xpos - lastX;   //屏幕中a-axis向右
+    float yoffset = lastY - ypos;   //y-axis向下
     lastX = xpos;
     lastY = ypos;
 
@@ -55,7 +65,7 @@ void Camera::updateOrientation(double xpos, double ypos) {
     F = simd::normalize(F);
 
     R = simd::normalize(simd::cross(F, simd::float3{0, 1, 0}));
-    U = simd::normalize(simd::cross(R, F));
+    U = simd::normalize(simd::cross(R,F));
 }
 
 float radians(float degrees) {

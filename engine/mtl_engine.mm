@@ -15,7 +15,6 @@ void MTLEngine::init(){
     printf("------------------------------Engine to init----------------------------------\n");
     initDevice();
     initWindow();
-    camera = new Camera();
     createSquare();
     createDefaultLibrary();
     createCommandQueue();
@@ -50,14 +49,14 @@ void MTLEngine::cleanup(){
 
 void MTLEngine::initDevice(){
     metalDevice = MTL::CreateSystemDefaultDevice();
-    
+    camera = new Camera();
     printf("metalDevice inited.\n");
 }
 
 void MTLEngine::initWindow() {
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindow = glfwCreateWindow(800, 800, "Metal Engine", NULL, NULL);
+    glfwWindow = glfwCreateWindow(800, 600, "Metal Engine", NULL, NULL);
     
     if (!glfwWindow) {
         glfwTerminate();
@@ -69,7 +68,6 @@ void MTLEngine::initWindow() {
     // 设置键盘回调函数
     glfwSetKeyCallback(glfwWindow, keyCallback);  // 这里注册了键盘回调函数
     glfwSetCursorPosCallback(glfwWindow, mouseCallback);
-    glfwSetInputMode(glfwWindow, GLFW_CURSOR, GLFW_CURSOR_DISABLED);    //隐藏光标
     int width, height;
     glfwGetFramebufferSize(glfwWindow, &width, &height);
     
@@ -80,7 +78,7 @@ void MTLEngine::initWindow() {
     metalLayer.drawableSize = CGSizeMake(width, height);
     metalWindow.contentView.layer = metalLayer;
     metalWindow.contentView.wantsLayer = YES;
-    
+
     printf("glfw window inited.\n");
 }
 
@@ -237,7 +235,7 @@ void MTLEngine::encodeRenderCommand(MTL::RenderCommandEncoder* renderCommandEnco
     
     printf("\t\t* created translationMatrix\n");
     
-    float angle = -1.1;
+    float angle = 0;
     matrix_float4x4 rotationMatrix = matrix4x4_rotation(angle, 1, 0, 0);
     
     matrix_float4x4 modelMatrix = simd_mul(translationMatrix, rotationMatrix);
@@ -281,12 +279,26 @@ void MTLEngine::resizeFrameBuffer(int width, int height){
 }
 
 void MTLEngine::keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
-    if (action == GLFW_PRESS) {
+    MTLEngine*  engine = (MTLEngine*)glfwGetWindowUserPointer(window);
+    float speed = 0.1f; // 移动速度
+    static float xTemp = 400.0f, yTemp = 300.0f;
+    if (action == GLFW_PRESS || action == GLFW_REPEAT) {
         if (key == GLFW_KEY_Q) {
             // 按下 Q 键时，退出程序
             printf("Q key pressed, exiting...\n");
             glfwSetWindowShouldClose(window, GLFW_TRUE);  // 设置窗口关闭标志
         }
+        if (key == GLFW_KEY_W) engine->camera->setP(engine->camera->getP() + speed * engine->camera->getF()); // 前进
+        if (key == GLFW_KEY_S) engine->camera->setP(engine->camera->getP() - speed * engine->camera->getF()); // 后退
+        if (key == GLFW_KEY_A) engine->camera->setP(engine->camera->getP() - speed * engine->camera->getR());   // 左移
+        if (key == GLFW_KEY_D) engine->camera->setP(engine->camera->getP() + speed * engine->camera->getR());   // 右移
+        if (key == GLFW_KEY_SPACE) engine->camera->setP(engine->camera->getP() + speed * simd::float3{0,1,0});  // 上升
+        if (key == GLFW_KEY_LEFT_CONTROL) engine->camera->setP(engine->camera->getP() - speed * simd::float3{0,1,0});  // 下降
+        if (key == GLFW_KEY_UP) engine->camera->updateOrientation(xTemp,yTemp--);
+        if (key == GLFW_KEY_DOWN) engine->camera->updateOrientation(xTemp,yTemp++);
+        if (key == GLFW_KEY_LEFT) engine->camera->updateOrientation(xTemp--,yTemp);
+        if (key == GLFW_KEY_RIGHT) engine->camera->updateOrientation(xTemp++,yTemp);
+
     }
 }
 
