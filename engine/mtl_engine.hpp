@@ -41,9 +41,12 @@ private:
     void initWindow();
 
     void createCube();
+    void createBuffers();
     void createDefaultLibrary();
     void createCommandQueue();
     void createRenderPipeline();
+    void createDepthAndMSAATextures();
+    void createRenderPassDescriptor();
 
     void draw();
     void encodeRenderCommand(MTL::RenderCommandEncoder* renderEncoder);
@@ -51,6 +54,8 @@ private:
 
     static void frameBufferSizeCallback(GLFWwindow *window, int width, int height); //调整窗口大小时，
     void resizeFrameBuffer(int width, int height);                                  //解决metalLayer.drawableSize 的分辨率不会更新的问题
+    // Upon resizing, update Depth and MSAA Textures.
+    void updateRenderPassDescriptor();
     
     MTL::Device* metalDevice;
     GLFWwindow* glfwWindow;
@@ -65,6 +70,13 @@ private:
     
     MTL::Buffer* cubeVertexBuffer;
     MTL::Buffer* transformationBuffer;
+    
+    MTL::DepthStencilState* depthStencilState;
+    MTL::RenderPassDescriptor* renderPassDescriptor;
+    MTL::Texture* msaaRenderTargetTexture = nullptr;
+    MTL::Texture* depthTexture;
+    int sampleCount = 4;
+
 
     Texture* grassTexture;
 };
