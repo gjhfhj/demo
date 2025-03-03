@@ -45,6 +45,7 @@ private:
     void createDefaultLibrary();
     void createCommandQueue();
     void createRenderPipeline();
+    void createLightSourceRenderPipeline();
     void createDepthAndMSAATextures();
     void createRenderPassDescriptor();
 
@@ -67,9 +68,13 @@ private:
     MTL::CommandQueue* metalCommandQueue;
     MTL::CommandBuffer* metalCommandBuffer;
     MTL::RenderPipelineState* metalRenderPSO;
+    MTL::RenderPipelineState* metalLightSourceRenderPSO;
     
     MTL::Buffer* cubeVertexBuffer;
-    MTL::Buffer* transformationBuffer;
+    MTL::Buffer* cubeTransformationBuffer;
+    MTL::Buffer* lightVertexBuffer;
+    MTL::Buffer* lightTransformationBuffer;
+
     
     MTL::DepthStencilState* depthStencilState;
     MTL::RenderPassDescriptor* renderPassDescriptor;
