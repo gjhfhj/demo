@@ -5,6 +5,9 @@
 //  Created by menji on 2025/2/20.
 //
 
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
+
 #include "mtl_engine.hpp"
 
 #include <iostream>
@@ -305,6 +308,16 @@ void MTLEngine::createDepthAndMSAATextures() {
     
     msaaTextureDescriptor->release();
     depthTextureDescriptor->release();
+    
+    MTL::TextureDescriptor* resolvedDepthTextureDescriptor = MTL::TextureDescriptor::alloc()->init();
+    resolvedDepthTextureDescriptor->setTextureType(MTL::TextureType2D);           // 2D 纹理
+    resolvedDepthTextureDescriptor->setPixelFormat(MTL::PixelFormatDepth32Float);     // 浮点格式存储深度值
+    resolvedDepthTextureDescriptor->setWidth(metalLayer.drawableSize.width);      // 宽度
+    resolvedDepthTextureDescriptor->setHeight(metalLayer.drawableSize.height);    // 高度
+    resolvedDepthTextureDescriptor->setUsage(MTL::TextureUsageRenderTarget | MTL::TextureUsageShaderRead); // 可渲染和读取
+    resolvedDepthTextureDescriptor->setStorageMode(MTL::StorageModeShared); //如果你创建 resolveDepthTexture 时用了 storageModePrivate，就会报错或根本读不出来。shaderd才能用getBytes直接读回到CPU。
+    resolvedDepthTexture = metalDevice->newTexture(resolvedDepthTextureDescriptor);
+    resolvedDepthTextureDescriptor->release();
 }
 
 void MTLEngine::createRenderPassDescriptor() {
@@ -321,8 +334,11 @@ void MTLEngine::createRenderPassDescriptor() {
 
     depthAttachment->setTexture(depthTexture);
     depthAttachment->setLoadAction(MTL::LoadActionClear);
-    depthAttachment->setStoreAction(MTL::StoreActionDontCare);
+    depthAttachment->setStoreAction(MTL::StoreActionStore);
     depthAttachment->setClearDepth(1.0);
+    
+    depthAttachment->setResolveTexture(resolvedDepthTexture);
+    depthAttachment->setStoreAction(MTL::StoreActionMultisampleResolve);  // 解析多重采样数据
 }
 
 void MTLEngine::updateRenderPassDescriptor() {
@@ -349,12 +365,75 @@ void MTLEngine::sendRenderCommand() {
     encodeRenderCommand(renderCommandEncoder);
     renderCommandEncoder->endEncoding();
 
+//    copyDepthTextureAfterRenderEncodedBeforeSendingCommand();   //在渲染后复制深度纹理为了获取到深度图
+    
+    
+    
     metalCommandBuffer->presentDrawable(metalDrawable);
     metalCommandBuffer->commit();
     metalCommandBuffer->waitUntilCompleted();
+    
+    // 1. 定义你要读的区域：origin + size
+    MTL::Region region = MTL::Region(
+        0,                                      // x 起点
+        0,                                      // y 起点
+        metalLayer.drawableSize.width,         // width
+        metalLayer.drawableSize.height         // height
+    );
+
+    NS::UInteger bytesPerRow = 4 * metalLayer.drawableSize.width; // 2. 每个像素 4 字节（32位浮点）
+    void* depthData = malloc(bytesPerRow * metalLayer.drawableSize.height); // 3. 分配内存
+    // 4. 真正从纹理里拷数据到 depthData
+    resolvedDepthTexture->getBytes(
+        depthData,         // 目标内存指针
+        bytesPerRow,       // 每一行写多少字节
+        region,            // 读哪块区域
+        /* level */ 0      // 哪个 mipmap 级别，通常最详细的就是 level 0
+    );
 
     
+    float* depthValues = (float*)depthData;
+    int width = metalLayer.drawableSize.width;
+    int height = metalLayer.drawableSize.height;
+    uint8_t* grayImage = new uint8_t[width * height]; // 灰度图像缓冲区
+    
+    for (int i = 0; i < width * height; i++) {
+        grayImage[i] = static_cast<uint8_t>(depthValues[i] * 255.0f); // 转换为灰度值 [0, 255]
+    }
+    
+//    stbi_write_png("/Users/menji/Movies/depthPNG/depth.png", width, height, 1, grayImage, width);
+    int result = stbi_write_png("/Users/menji/Movies/depthPNG/depth.png",
+                                width,
+                                height,
+                                1,
+                                grayImage,
+                                width);
+    if (!result) {
+        std::cerr << "Failed to write depth PNG\n";
+    }
+    
+    free(depthData); // 释放内存
+    delete[] grayImage;
+    
     printf("sended\n");
+}
+
+void MTLEngine::copyDepthTextureAfterRenderEncodedBeforeSendingCommand() {
+    MTL::BlitCommandEncoder* blitEncoder = metalCommandBuffer->blitCommandEncoder();
+    blitEncoder->copyFromTexture(depthTexture, 0, 0, resolvedDepthTexture, 0 , 0,
+                                metalLayer.drawableSize.width,
+                                metalLayer.drawableSize.height);
+    // Grok给我的是resolveTexture，实际上跳转到BlitCommandEncoder类时没有这个，chatGPT告诉我是：
+                                                            // 解析多重采样纹理到普通纹理
+                                                            //    void copyFromTexture(const Texture* sourceTexture,
+                                                            //                         NSUInteger sourceSlice,
+                                                            //                         NSUInteger sourceLevel,
+                                                            //                         const Texture* destinationTexture,
+                                                            //                         NSUInteger destinationSlice,
+                                                            //                         NSUInteger destinationLevel,
+                                                            //                         NSUInteger sliceCount,
+                                                            //                         NSUInteger levelCount);
+    blitEncoder->endEncoding();
 }
 
 void MTLEngine::encodeRenderCommand(MTL::RenderCommandEncoder* renderCommandEncoder) {

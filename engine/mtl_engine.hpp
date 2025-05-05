@@ -30,6 +30,7 @@
 #include "AAPLMathUtilities.h"
 
 
+
 class MTLEngine {
 public:
     void init();
@@ -51,6 +52,7 @@ private:
 
     void draw();
     void encodeRenderCommand(MTL::RenderCommandEncoder* renderEncoder);
+    void copyDepthTextureAfterRenderEncodedBeforeSendingCommand();
     void sendRenderCommand();
 
     static void frameBufferSizeCallback(GLFWwindow *window, int width, int height); //调整窗口大小时，
@@ -84,4 +86,6 @@ private:
 
 
     Texture* grassTexture;
+    
+    MTL::Texture* resolvedDepthTexture;
 };

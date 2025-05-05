@@ -41,6 +41,16 @@
 		BCF2BA002D67458400DC3F2E /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		BC93AAAB2DC73CA0009AA5F8 /* Exceptions for "eternal" folder in "engine" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				stb/stb_image_write_impl.cpp,
+			);
+			target = BCF2B9832D66EEB300DC3F2E /* engine */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
 		BC4AAEE92D69D054001BD0C6 /* Exceptions for "eternal" folder in "Embed Libraries" phase from "engine" target */ = {
 			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
@@ -58,6 +68,7 @@
 		BC786BDC2D69B36100054D1D /* eternal */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
+				BC93AAAB2DC73CA0009AA5F8 /* Exceptions for "eternal" folder in "engine" target */,
 				BC4AAEE92D69D054001BD0C6 /* Exceptions for "eternal" folder in "Embed Libraries" phase from "engine" target */,
 			);
 			path = eternal;
