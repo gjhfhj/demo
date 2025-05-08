@@ -47,18 +47,30 @@ private:
     void createCommandQueue();
     void createRenderPipeline();
     void createLightSourceRenderPipeline();
-    void createDepthAndMSAATextures();
-    void createRenderPassDescriptor();
+    
+    void createScanFragmentPipeline();
+    void createScanComputePipeline();
 
+    void createDepthAndMSAATextures();
+    void createOffscreenTextures();
+    void createRenderPassDescriptor();
+    void createOffscreenPassDescriptor();
+    void postProcessPass();
+    
     void draw();
     void encodeRenderCommand(MTL::RenderCommandEncoder* renderEncoder);
     void copyDepthTextureAfterRenderEncodedBeforeSendingCommand();
     void sendRenderCommand();
+    
+    // Upon resizing, update Depth and MSAA Textures.
+    void updateRenderPassDescriptor();
+    void updateOffscreenPassDescriptor();
+    
+    void writeDepthTexture();
 
     static void frameBufferSizeCallback(GLFWwindow *window, int width, int height); //调整窗口大小时，
     void resizeFrameBuffer(int width, int height);                                  //解决metalLayer.drawableSize 的分辨率不会更新的问题
-    // Upon resizing, update Depth and MSAA Textures.
-    void updateRenderPassDescriptor();
+    static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
     
     MTL::Device* metalDevice;
     GLFWwindow* glfwWindow;
@@ -72,6 +84,9 @@ private:
     MTL::RenderPipelineState* metalRenderPSO;
     MTL::RenderPipelineState* metalLightSourceRenderPSO;
     
+    MTL::RenderPipelineState* metalScanPSO;
+    MTL::ComputePipelineState* metalScanCPSO;
+    
     MTL::Buffer* cubeVertexBuffer;
     MTL::Buffer* cubeTransformationBuffer;
     MTL::Buffer* lightVertexBuffer;
@@ -80,12 +95,15 @@ private:
     
     MTL::DepthStencilState* depthStencilState;
     MTL::RenderPassDescriptor* renderPassDescriptor;
+    MTL::RenderPassDescriptor* offscreenPassDesc = nullptr;
     MTL::Texture* msaaRenderTargetTexture = nullptr;
     MTL::Texture* depthTexture;
+    MTL::Texture* resolvedDepthTexture;
+    MTL::Texture* sceneMSAATexture;
+    MTL::Texture* sceneTargetColorTexture; //offscreen目标颜色纹理
     int sampleCount = 4;
 
 
     Texture* grassTexture;
     
-    MTL::Texture* resolvedDepthTexture;
 };
