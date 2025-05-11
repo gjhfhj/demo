@@ -42,7 +42,7 @@ fragment float4 fragmentScan(
     constant ScanUniforms& uni        [[ buffer(4) ]])
 {
     // 1. 读取原始场景颜色
-    constexpr sampler samp(coord::pixel);
+    constexpr sampler samp(coord::normalized, address::clamp_to_edge);
     float4 sceneColor = sceneTex.sample(samp, in.uv);
 
     // 2. 读取深度值
@@ -61,5 +61,7 @@ fragment float4 fragmentScan(
                         uni.highlightColor,
                         band * uni.intensity);
 
-    return float4(outRgb, sceneColor.a);
+//    return float4(outRgb, sceneColor.a);
+//    return float4(1,1,0, 1);
+    return float4( sceneColor.rgb, 1);
 }

@@ -11,7 +11,7 @@
 using namespace simd;
 
 struct VertexData {
-    float4 position;
+    float4 position [[position]];
     float4 normal;
 };
 

@@ -30,19 +30,19 @@ fragment float4 fragmentShader(OutData in [[stage_in]],
                                constant float4& lightPosition  [[buffer(2)]],
                                constant float4& cameraPosition [[buffer(3)]])
 {
-    // Ambient
+    // Ambient环境光
     float ambientStrength = 0.2f;
     float4 ambient = ambientStrength * lightColor;
     
-    // Diffuse
+    // Diffuse漫反射
     float3 norm = normalize(in.normal.xyz);
-    float4 lightDir = normalize(lightPosition - in.fragmentPosition);
+    float4 lightDir = normalize(lightPosition - in.fragmentPosition); // 从片元指向光源的方向。
     float diff = max(dot(norm, lightDir.xyz), 0.0);
     float4 diffuse = diff * lightColor;
     
     // Specular
     float specularStrength = 0.5f;
-    float4 viewDir = normalize(cameraPosition - in.fragmentPosition);
+    float4 viewDir = normalize(cameraPosition - in.fragmentPosition); // 从片元指向相机的方向
     float4 reflectDir = reflect(-lightDir, float4(norm, 1));
     float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
     float4 specular = specularStrength * spec * lightColor;

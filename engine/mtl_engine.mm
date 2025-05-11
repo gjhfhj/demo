@@ -305,9 +305,9 @@ void MTLEngine::createScanFragmentPipeline() {
     assert(desc);
     
     desc->colorAttachments()->object(0)->setPixelFormat((MTL::PixelFormat)metalLayer.pixelFormat);
-    desc->setSampleCount(sampleCount);
+    desc->setSampleCount(1);
     desc->setLabel(NS::String::string("Scan Fragment Pipeline", NS::ASCIIStringEncoding));
-    desc->setDepthAttachmentPixelFormat(MTL::PixelFormatDepth32Float);
+//    desc->setDepthAttachmentPixelFormat(MTL::PixelFormatDepth32Float);
 
     NS::Error* error = nullptr;
     metalScanPSO = metalDevice->newRenderPipelineState(desc, &error);
@@ -339,7 +339,7 @@ void MTLEngine::createDepthAndMSAATextures() {
     msaaTextureDescriptor->setWidth(metalLayer.drawableSize.width);
     msaaTextureDescriptor->setHeight(metalLayer.drawableSize.height);
     msaaTextureDescriptor->setSampleCount(sampleCount);
-    msaaTextureDescriptor->setUsage(MTL::TextureUsageRenderTarget);
+    msaaTextureDescriptor->setUsage(MTL::TextureUsageRenderTarget | MTL::TextureUsageShaderRead);
     
     msaaRenderTargetTexture = metalDevice->newTexture(msaaTextureDescriptor);
     
@@ -398,24 +398,38 @@ void MTLEngine::createOffscreenTextures() {
 }
 
 void MTLEngine::createRenderPassDescriptor() {
+    //pass的过程
+    
+    // 1. 先init一个Descriptor
     renderPassDescriptor = MTL::RenderPassDescriptor::alloc()->init();
-
+    
+    // 2. 获取颜色和深度附件描述符
     MTL::RenderPassColorAttachmentDescriptor* colorAttachment = renderPassDescriptor->colorAttachments()->object(0);
     MTL::RenderPassDepthAttachmentDescriptor* depthAttachment = renderPassDescriptor->depthAttachment();
 
+    // ===== Color Attachment 设置 =====
+    // 2.1 指定多采样渲染目标（MSAA 中间缓冲）
     colorAttachment->setTexture(msaaRenderTargetTexture); //渲染时，所有的片元输出先写入这个多采样纹理（sampleCount > 1）的中间缓冲。
-    colorAttachment->setResolveTexture(metalDrawable->texture()); //pass结束后将MSAA中间缓冲“解析resolve”为单采样并写入此（屏幕最终输出的纹理）
+    
+    // 2.2 在 Pass 开始前清除并填充背景色
     colorAttachment->setLoadAction(MTL::LoadActionClear); //在draw之前清除
     colorAttachment->setClearColor(MTL::ClearColor(41.0f/255.0f, 42.0f/255.0f, 48.0f/255.0f, 1.0)); // 并置为同一指定颜色背景
-    colorAttachment->setStoreAction(MTL::StoreActionMultisampleResolve); //渲染结束时，不仅要保留 MSAA 缓冲的数据，还要自动把它 resolve                                                                                    到上面指定的单采样纹理。（metalDrawable吗？)
 
+    // 2.3 Pass 结束时，将 MSAA 缓冲解析到最终可呈现纹理
+    colorAttachment->setResolveTexture(sceneTargetColorTexture); //pass结束后将MSAA中间缓冲“解析resolve”为单采样并写入此（屏幕最终输出的纹理）
+    colorAttachment->setStoreAction(MTL::StoreActionStoreAndMultisampleResolve); //渲染结束时，不仅要保留 MSAA 缓冲的数据，还要自动把它 resolve                                                                                    到上面指定的单采样纹理。（metalDrawable吗？)
+
+    // ===== Depth Attachment 设置 =====
+    // 3.1 指定 MSAA 深度缓冲
     depthAttachment->setTexture(depthTexture); //深度测试和深度写入都发生在这个多采样深度缓冲上。
-    depthAttachment->setLoadAction(MTL::LoadActionClear); //开始时清除深度缓冲
+          
+    // 3.2 在 Pass 开始前清除深度缓冲
+    depthAttachment->setLoadAction(MTL::LoadActionClear); //Pass开始时清除深度缓冲
     depthAttachment->setClearDepth(1.0); //并把所有像素深度设为 1.0（最远）。
-    depthAttachment->setStoreAction(MTL::StoreActionStore); //默认先把写过的深度保存在这个 MSAA 深度缓冲里（指开始指定的depthTexture）。// 这里 StoreActionStore 并没有效果，因为下一行被覆盖了
-
+    
+    // 3.3 Pass 结束时，将 MSAA 深度解析到指定深度纹理
     depthAttachment->setResolveTexture(resolvedDepthTexture); // Pass结束后，再把多采样深度解析道resolvedDepthTexture里
-    depthAttachment->setStoreAction(MTL::StoreActionMultisampleResolve);  // 解析多重采样数据
+    depthAttachment->setStoreAction(MTL::StoreActionStoreAndMultisampleResolve);  // 解析多重采样数据
     
     
     //然后在每一帧调用“auto encoder = commandBuffer->renderCommandEncoder(renderPassDescriptor);“时，
@@ -430,39 +444,55 @@ void MTLEngine::updateRenderPassDescriptor() {
     renderPassDescriptor->colorAttachments()->object(0)->setTexture(msaaRenderTargetTexture);
     renderPassDescriptor->colorAttachments()->object(0)->setResolveTexture(metalDrawable->texture());
     renderPassDescriptor->depthAttachment()->setTexture(depthTexture);
+    renderPassDescriptor->depthAttachment()->setResolveTexture(resolvedDepthTexture);
 }
 
 void MTLEngine::createOffscreenPassDescriptor() {
+    // pass过程
+    // 1. 分配 RenderPassDescriptor
     offscreenPassDesc = MTL::RenderPassDescriptor::alloc()->init();
 
-    // 离屏色附件
+    // ===== 离屏色附件设置 =====
     auto colorAtt = offscreenPassDesc->colorAttachments()->object(0);
-    colorAtt->setTexture(sceneMSAATexture);
+    // 1.1 绑定多采样场景渲染目标
+    colorAtt->setTexture(metalDrawable->texture());
+    // 1.2 保留以前渲染结果（load），并指定清除色（可选，仅在LoadAction为Clear时生效）
     colorAtt->setLoadAction(MTL::LoadActionClear);
-    colorAtt->setClearColor({0.1,0.1,0.1,1});
+    colorAtt->setClearColor({0.5,0.5,0.5,1});
    
-    colorAtt->setStoreAction(MTL::StoreActionMultisampleResolve);
-    colorAtt->setResolveTexture(sceneTargetColorTexture);
+    // 1.3 Pass 结束时解析 MSAA，并写入最终输出纹理
+//    colorAtt->setResolveTexture(resolvedDepthTexture);
+//    colorAtt->setStoreAction(MTL::StoreActionMultisampleResolve);
 
 
     //这里renderpass相当于onscreenPass，它的目标为metalDrawable，下一帧就丢掉。但offscreenPass用来后期特效什么的，它的生命周期在一整帧内都有效，可以安全地用来做后处理或 CPU 读取。用来做一些视觉效果之类的。
-    // 深度附件：直接写到你已有的 resolveDepthTexture
-    auto depthAtt = offscreenPassDesc->depthAttachment();
-    depthAtt->setTexture(depthTexture); //写入深度值
+    // ===== 离屏深度附件设置 ===== 直接写到你已有的 resolveDepthTexture
+//    auto depthAtt = offscreenPassDesc->depthAttachment();
     
+    // 2.1 绑定 MSAA 深度缓冲
+//    depthAtt->setTexture(resolvedDepthTexture); //写入深度值
+    
+    // 2.2 指定以 LoadActionLoad 开始，下一行 ClearDepth 只在 LoadActionClear 时生效
     //以下两代码在offEnc = commandBuffer->renderCommandEncoder(offscreenPassDesc时先把depthTexture清为1
-    depthAtt->setLoadAction(MTL::LoadActionClear);
-    depthAtt->setClearDepth(1.0);
+//    depthAtt->setLoadAction(MTL::LoadActionLoad);
+//    depthAtt->setClearDepth(0.0);
+    
+    // 2.3 若需将 MSAA 深度解析到单采样纹理，可启用以下设置
     //以下两代码在offEnc->endEncoding()时把 depthTexture（多重采样 MSAA）上所有样本合并，然后写入同一个 resolvedDepthTexture（单采样）。
-    depthAtt->setStoreAction(MTL::StoreActionMultisampleResolve); //resolvedDepthTexture 已经是解析后的纹理，这种配置可能是多余的或不正确的。
-    depthAtt->setResolveTexture(resolvedDepthTexture);
+//    depthAtt->setResolveTexture(resolvedDepthTexture);
+//    depthAtt->setStoreAction(MTL::StoreActionMultisampleResolve); //resolvedDepthTexture 已经是解析后的纹理，这种配置可能是多余的或不正确的。
+    
+    
+    
+    /*
+     * 离屏 Pass 与 Onscreen Pass 不同之处：
+     * - Onscreen Pass 直接输出到屏幕背缓冲，每帧提交即丢弃；
+     * - Offscreen Pass 的附件在整个帧内有效，可用于后处理、CPU 读取等效果。
+     */
 }
 
 void MTLEngine::updateOffscreenPassDescriptor() {
-    offscreenPassDesc->colorAttachments()->object(0)->setTexture(sceneMSAATexture);
-    offscreenPassDesc->colorAttachments()->object(0)->setResolveTexture(sceneTargetColorTexture);
-    offscreenPassDesc->depthAttachment()->setTexture(depthTexture);
-    offscreenPassDesc->depthAttachment()->setResolveTexture(resolvedDepthTexture);
+    offscreenPassDesc->colorAttachments()->object(0)->setTexture(metalDrawable->texture());
 }
 
 void MTLEngine::postProcessPass() {
@@ -508,30 +538,30 @@ void MTLEngine::sendRenderCommand() {
     encodeRenderCommand(renderCommandEncoder);
     renderCommandEncoder->endEncoding();
     
-    updateOffscreenPassDescriptor();
-    auto offEnc = metalCommandBuffer->renderCommandEncoder(offscreenPassDesc);
-    //scanPSO
-    float scanTime = fmod(glfwGetTime(), 1.0f);  // 周期 1 秒
-    offEnc->setRenderPipelineState(metalScanPSO);
-//    offEnc->setDepthStencilState(depthStencilState);
-    offEnc->setFragmentTexture(sceneTargetColorTexture, 0);
-    offEnc->setFragmentTexture(resolvedDepthTexture, 1);
-    float speed = 0.2f;
-    struct ScanUniforms {
-        float uProgress, bandWidth, intensity;
-        float4 highlightColor[3];
-    } scanUni;
-    // 每帧更新
-    scanUni.uProgress     = glfwGetTime() * speed;  // speed 决定扫描速度
-    scanUni.bandWidth     = 0.02;                   // 试着 0.01~0.05
-    scanUni.intensity     = 1.2;                    // 1.0~2.0
-    scanUni.highlightColor[0] = 0.8; // R
-    scanUni.highlightColor[1] = 0.2; // G
-    scanUni.highlightColor[2] = 0.2; // B
-    offEnc->setFragmentBytes(&scanUni, sizeof(scanUni), 4);
-//    offEnc->setFragmentBytes(&scanTime, sizeof(scanTime), 4);
-    offEnc->drawPrimitives(MTL::PrimitiveTypeTriangle, (NS::UInteger)0, (NS::UInteger)3);
-    offEnc->endEncoding();
+//    updateOffscreenPassDescriptor();
+//    auto offEnc = metalCommandBuffer->renderCommandEncoder(offscreenPassDesc);
+//    //scanPSO
+////    float scanTime = fmod(glfwGetTime(), 1.0f);  // 周期 1 秒
+//    offEnc->setRenderPipelineState(metalScanPSO);
+////    offEnc->setDepthStencilState(depthStencilState);
+//    offEnc->setFragmentTexture(sceneTargetColorTexture, 0);
+//    offEnc->setFragmentTexture(resolvedDepthTexture, 1);
+//    float speed = 0.2f;
+//    struct ScanUniforms {
+//        float uProgress, bandWidth, intensity;
+//        float4 highlightColor[3];
+//    } scanUni;
+//    // 每帧更新
+//    scanUni.uProgress     = glfwGetTime() * speed;  // speed 决定扫描速度
+//    scanUni.bandWidth     = 0.05;                   // 试着 0.01~0.05
+//    scanUni.intensity     = 1.2;                    // 1.0~2.0
+//    scanUni.highlightColor[0] = 0.8; // R
+//    scanUni.highlightColor[1] = 0.2; // G
+//    scanUni.highlightColor[2] = 0.2; // B
+//    offEnc->setFragmentBytes(&scanUni, sizeof(scanUni), 4);
+////    offEnc->setFragmentBytes(&scanTime, sizeof(scanTime), 4);
+//    offEnc->drawPrimitives(MTL::PrimitiveTypeTriangle, (NS::UInteger)0, (NS::UInteger)3);
+//    offEnc->endEncoding();
     
 //    copyDepthTextureAfterRenderEncodedBeforeSendingCommand();   //在渲染后复制深度纹理为了获取到深度图
     
@@ -541,7 +571,7 @@ void MTLEngine::sendRenderCommand() {
     metalCommandBuffer->commit();
     metalCommandBuffer->waitUntilCompleted();
     
-    writeDepthTexture();
+//    writeDepthTexture();
     
     printf("sended\n");
 }
