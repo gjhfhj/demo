@@ -21,6 +21,7 @@ void MTLEngine::init(){
     printf("-------------------------------Engine to init--------------------------------\n");
     initDevice();
     initWindow();
+    timer.init();
     
     createCube();
     createBuffers();
@@ -40,6 +41,7 @@ void MTLEngine::run(){
     printf("-----------------Engine to run(the next: to end and cleanup)------------------\n");
     
     while(!glfwWindowShouldClose(glfwWindow)){
+//        timer.update();
         @autoreleasepool {
             metalDrawable = (__bridge CA::MetalDrawable*)[metalLayer nextDrawable];
             draw();
@@ -294,25 +296,57 @@ void MTLEngine::createLightSourceRenderPipeline() {
 }
 
 void MTLEngine::createScanFragmentPipeline() {
-    MTL::Function* vertexFunc = metalDefaultLibrary->newFunction(NS::String::string("scanVertex", NS::ASCIIStringEncoding));
+    MTL::Function* vertexFunc = metalDefaultLibrary->newFunction(NS::String::string("passthroughVS", NS::ASCIIStringEncoding));
     assert(vertexFunc);
-    MTL::Function* fragmentScanFunc = metalDefaultLibrary->newFunction(NS::String::string("fragmentScan", NS::ASCIIStringEncoding));
+    MTL::Function* fragmentScanFunc = metalDefaultLibrary->newFunction(NS::String::string("scanEffectPS", NS::ASCIIStringEncoding));
     assert(fragmentScanFunc);
 
+    //由于在scan_fragment的VSIn输入结构体中使用了[[attribute]]标注，则得标注出来到底attribute是啥。
+    MTL::VertexDescriptor* vertexDesc = MTL::VertexDescriptor::alloc()->init();
+
+    // Attribute 0: position (float4)
+    vertexDesc->attributes()->object(0)->setFormat(MTL::VertexFormatFloat4);
+    vertexDesc->attributes()->object(0)->setOffset(0);
+    vertexDesc->attributes()->object(0)->setBufferIndex(0);
+
+    // Attribute 1: uv (float2)
+    vertexDesc->attributes()->object(1)->setFormat(MTL::VertexFormatFloat2);
+    vertexDesc->attributes()->object(1)->setOffset(16);
+    vertexDesc->attributes()->object(1)->setBufferIndex(0);
+
+    // Layout: stride = 24 bytes
+    vertexDesc->layouts()->object(0)->setStride(24);
+    vertexDesc->layouts()->object(0)->setStepFunction(MTL::VertexStepFunctionPerVertex);
+    
+    
+    MTL::SamplerDescriptor* samplerDesc = MTL::SamplerDescriptor::alloc()->init();
+    samplerDesc->setMinFilter(MTL::SamplerMinMagFilterLinear);
+    samplerDesc->setMagFilter(MTL::SamplerMinMagFilterLinear);
+    samplerDesc->setSAddressMode(MTL::SamplerAddressModeRepeat);
+    samplerDesc->setTAddressMode(MTL::SamplerAddressModeRepeat);
+    
+    
+    samplerState = metalDevice->newSamplerState(samplerDesc);
+    
     auto desc = MTL::RenderPipelineDescriptor::alloc()->init();
     desc->setVertexFunction(vertexFunc);
     desc->setFragmentFunction(fragmentScanFunc);
+    desc->setVertexDescriptor(vertexDesc);
     assert(desc);
     
-    desc->colorAttachments()->object(0)->setPixelFormat((MTL::PixelFormat)metalLayer.pixelFormat);
+    desc->colorAttachments()->object(0)->setPixelFormat(MTL::PixelFormatBGRA8Unorm);
     desc->setSampleCount(1);
     desc->setLabel(NS::String::string("Scan Fragment Pipeline", NS::ASCIIStringEncoding));
 //    desc->setDepthAttachmentPixelFormat(MTL::PixelFormatDepth32Float);
 
     NS::Error* error = nullptr;
     metalScanPSO = metalDevice->newRenderPipelineState(desc, &error);
+//    assert(metalScanPSO);
     if (!metalScanPSO) {
-        std::cerr << error->localizedDescription() << "\n";
+        // localizedDescription 有时候太简略，试试直接 log 出 error->localizedFailureReason
+        std::cerr << "PSO compile failed: " << error->localizedDescription() << "\n"
+                  << "Reason: " << error->localizedFailureReason() << "\n"
+                  << "UserInfo: " << error->userInfo() << "\n";
         std::exit(1);
     }
 
@@ -428,7 +462,7 @@ void MTLEngine::createRenderPassDescriptor() {
     depthAttachment->setClearDepth(1.0); //并把所有像素深度设为 1.0（最远）。
     
     // 3.3 Pass 结束时，将 MSAA 深度解析到指定深度纹理
-    depthAttachment->setResolveTexture(resolvedDepthTexture); // Pass结束后，再把多采样深度解析道resolvedDepthTexture里
+    depthAttachment->setResolveTexture(metalDrawable->texture()); // Pass结束后，再把多采样深度解析道resolvedDepthTexture里
     depthAttachment->setStoreAction(MTL::StoreActionStoreAndMultisampleResolve);  // 解析多重采样数据
     
     
@@ -442,7 +476,7 @@ void MTLEngine::createRenderPassDescriptor() {
 
 void MTLEngine::updateRenderPassDescriptor() {
     renderPassDescriptor->colorAttachments()->object(0)->setTexture(msaaRenderTargetTexture);
-    renderPassDescriptor->colorAttachments()->object(0)->setResolveTexture(metalDrawable->texture());
+    renderPassDescriptor->colorAttachments()->object(0)->setResolveTexture(sceneTargetColorTexture);
     renderPassDescriptor->depthAttachment()->setTexture(depthTexture);
     renderPassDescriptor->depthAttachment()->setResolveTexture(resolvedDepthTexture);
 }
@@ -458,7 +492,7 @@ void MTLEngine::createOffscreenPassDescriptor() {
     colorAtt->setTexture(metalDrawable->texture());
     // 1.2 保留以前渲染结果（load），并指定清除色（可选，仅在LoadAction为Clear时生效）
     colorAtt->setLoadAction(MTL::LoadActionClear);
-    colorAtt->setClearColor({0.5,0.5,0.5,1});
+    colorAtt->setClearColor({1,1,0,0});
    
     // 1.3 Pass 结束时解析 MSAA，并写入最终输出纹理
 //    colorAtt->setResolveTexture(resolvedDepthTexture);
@@ -538,30 +572,53 @@ void MTLEngine::sendRenderCommand() {
     encodeRenderCommand(renderCommandEncoder);
     renderCommandEncoder->endEncoding();
     
-//    updateOffscreenPassDescriptor();
-//    auto offEnc = metalCommandBuffer->renderCommandEncoder(offscreenPassDesc);
-//    //scanPSO
-////    float scanTime = fmod(glfwGetTime(), 1.0f);  // 周期 1 秒
-//    offEnc->setRenderPipelineState(metalScanPSO);
-////    offEnc->setDepthStencilState(depthStencilState);
-//    offEnc->setFragmentTexture(sceneTargetColorTexture, 0);
-//    offEnc->setFragmentTexture(resolvedDepthTexture, 1);
-//    float speed = 0.2f;
-//    struct ScanUniforms {
-//        float uProgress, bandWidth, intensity;
-//        float4 highlightColor[3];
-//    } scanUni;
-//    // 每帧更新
-//    scanUni.uProgress     = glfwGetTime() * speed;  // speed 决定扫描速度
-//    scanUni.bandWidth     = 0.05;                   // 试着 0.01~0.05
-//    scanUni.intensity     = 1.2;                    // 1.0~2.0
-//    scanUni.highlightColor[0] = 0.8; // R
-//    scanUni.highlightColor[1] = 0.2; // G
-//    scanUni.highlightColor[2] = 0.2; // B
-//    offEnc->setFragmentBytes(&scanUni, sizeof(scanUni), 4);
-////    offEnc->setFragmentBytes(&scanTime, sizeof(scanTime), 4);
-//    offEnc->drawPrimitives(MTL::PrimitiveTypeTriangle, (NS::UInteger)0, (NS::UInteger)3);
-//    offEnc->endEncoding();
+    updateOffscreenPassDescriptor();
+    auto offEnc = metalCommandBuffer->renderCommandEncoder(offscreenPassDesc);
+       //scanPSO
+//    float scanTime = fmod(glfwGetTime(), 1.0f);  // 周期 1 秒
+    offEnc->setRenderPipelineState(metalScanPSO);
+    offEnc->setFragmentSamplerState(samplerState, 0);
+    offEnc->setFragmentTexture(sceneTargetColorTexture, 0);
+    offEnc->setFragmentTexture(resolvedDepthTexture, 1);
+    struct ScanUniforms {
+        float time;
+        float scanSpeed = 0.3f;
+        float scanWidth = 0.2;
+        float farPlane = 8.0f;
+    }uniforms;
+    float currentTime = timer.getCurrentTime();
+//    float scanMaxDepth = 50.0f;
+//    float speed = 1.0f;
+    uniforms.time = currentTime;
+
+    offEnc->setFragmentBytes(&uniforms, sizeof(ScanUniforms), 0);
+
+    struct Vertex {
+        float position[4];
+        float uv[2];
+    };
+//    Vertex vertices[] = {
+//        { {-1.0f, -1.0f, 0.0f, 1.0f}, {0.0f, 0.0f} }, // 左下
+//        { { 1.0f, -1.0f, 0.0f, 1.0f}, {1.0f, 0.0f} }, // 右下
+//        { { 1.0f,  1.0f, 0.0f, 1.0f}, {1.0f, 1.0f} }, // 右上
+//        { {-1.0f, -1.0f, 0.0f, 1.0f}, {0.0f, 0.0f} }, // 左下
+//        { { 1.0f,  1.0f, 0.0f, 1.0f}, {1.0f, 1.0f} }, // 右上
+//        { {-1.0f,  1.0f, 0.0f, 1.0f}, {0.0f, 1.0f} }  // 左上
+//    };
+//    
+    Vertex vertices[] = {
+        { {-1.0f, -1.0f, 0.0f, 1.0f}, {0.0f, 1.0f} }, // 左下 -> UV Y=1
+        { { 1.0f, -1.0f, 0.0f, 1.0f}, {1.0f, 1.0f} }, // 右下 -> UV Y=1
+        { { 1.0f,  1.0f, 0.0f, 1.0f}, {1.0f, 0.0f} }, // 右上 -> UV Y=0
+        { {-1.0f, -1.0f, 0.0f, 1.0f}, {0.0f, 1.0f} }, // 左下 -> UV Y=1
+        { { 1.0f,  1.0f, 0.0f, 1.0f}, {1.0f, 0.0f} }, // 右上 -> UV Y=0
+        { {-1.0f,  1.0f, 0.0f, 1.0f}, {0.0f, 0.0f} }  // 左上 -> UV Y=0
+    };
+    
+    auto vertexBuffer = metalDevice->newBuffer(vertices, sizeof(vertices), MTL::ResourceStorageModeShared);
+    offEnc->setVertexBuffer(vertexBuffer, 0, 0);
+    offEnc->drawPrimitives(MTL::PrimitiveTypeTriangle, (NS::UInteger)0, (NS::UInteger)6);
+    offEnc->endEncoding();
     
 //    copyDepthTextureAfterRenderEncodedBeforeSendingCommand();   //在渲染后复制深度纹理为了获取到深度图
     
@@ -656,7 +713,7 @@ void MTLEngine::encodeRenderCommand(MTL::RenderCommandEncoder* renderCommandEnco
     renderCommandEncoder->setRenderPipelineState(metalLightSourceRenderPSO);
     transformationData = { modelMatrix, viewMatrix, perspectiveMatrix };
     memcpy(lightTransformationBuffer->contents(), &transformationData, sizeof(transformationData));
-    renderCommandEncoder->setVertexBuffer(lightVertexBuffer, 0, 0);
+    renderCommandEncoder->setVertexBuffer(lightVertexBuffer, 0, 0); // 将顶点数据缓冲区绑定到顶点着色器
     renderCommandEncoder->setVertexBuffer(lightTransformationBuffer, 0, 1);
     renderCommandEncoder->setFragmentBytes(&lightColor, sizeof(lightColor), 0);
     renderCommandEncoder->drawPrimitives(typeTriangle, vertexStart, vertexCount);

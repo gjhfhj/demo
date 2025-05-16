@@ -21,6 +21,7 @@
 
 #include <simd/simd.h>
 
+#include "timer.hpp"
 #include "VertexData.hpp"
 #include "Texture.hpp"
 #include <stb/stb_image.h>
@@ -38,9 +39,10 @@ public:
     void cleanup();
 
 private:
+    Timer timer;
     void initDevice();
     void initWindow();
-
+    
     void createCube();
     void createBuffers();
     void createDefaultLibrary();
@@ -94,6 +96,7 @@ private:
 
     
     MTL::DepthStencilState* depthStencilState;
+    MTL::SamplerState* samplerState;
     MTL::RenderPassDescriptor* renderPassDescriptor;
     MTL::RenderPassDescriptor* offscreenPassDesc = nullptr;
     MTL::Texture* msaaRenderTargetTexture = nullptr;

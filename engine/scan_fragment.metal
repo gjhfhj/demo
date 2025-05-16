@@ -7,61 +7,53 @@
 
 #include <metal_stdlib>
 using namespace metal;
-struct Varying { float4 position [[position]]; float2 uv; };
 
-// 只用一个 uint 顶点 id，就能生成一个三角形覆盖全屏
-vertex Varying scanVertex(uint vid [[vertex_id]]) {
-    // 定义三个顶点的裁剪空间和 UV
-    float2 pos[3] = {
-        float2(-1.0, -1.0),
-        float2( 3.0, -1.0),
-        float2(-1.0,  3.0)
-    };
-    float2 uv[3] = {
-        float2(0.0, 0.0),
-        float2(2.0, 0.0),
-        float2(0.0, 2.0)
-    };
-    Varying out;
-    out.position = float4(pos[vid], 0.0, 1.0);
-    out.uv       = uv[vid] * 0.5; // 把 (2,0),(0,2) 拉回 (1,0),(0,1)
+struct VSIn  { float2 pos  [[attribute(0)]]; float2 uv [[attribute(1)]]; };
+struct VSOut { float4 position [[position]]; float2 uv; };
+struct ScanUniforms {
+    float time;       // 动画时间
+    float scanSpeed;  // 扫描速度
+    float scanWidth;  // 扫描条宽度
+    
+    float farPlane;
+};
+
+float linearizeDepth(float z, float near, float far) {
+    float z_ndc = z * 2.0 - 1.0; // [0, 1] → [-1, 1]
+    return (2.0 * near * far) / (far + near - z_ndc * (far - near));
+}
+
+vertex VSOut passthroughVS(VSIn in [[stage_in]]) {
+    VSOut out;
+//    out.position = in.pos;
+    out.position = float4(in.pos, 0, 1);
+    out.uv = in.uv;
     return out;
 }
 
-struct ScanUniforms {
-    float uProgress;   // 当前扫描位置，0→1 循环
-    float bandWidth;   // 扫描带宽度（控制扫描线厚度）
-    float intensity;   // 高亮强度
-    float3 highlightColor; // 扫描线颜色
-};
+fragment float4 scanEffectPS(VSOut in [[stage_in]],
+                             texture2d<float> colorTex [[texture(0)]],
+                             texture2d<float> depthTex [[texture(1)]],
+                             constant ScanUniforms& uniforms [[buffer(0)]],
+                             sampler s [[sampler(0)]]) {
+    float2 flippedUV = float2(in.uv.x, 1.0 - in.uv.y); // 翻转 Y 轴
+    // 采样颜色和深度
+    float4 color = colorTex.sample(s, in.uv);
+    float depth = depthTex.sample(s, in.uv).r;
 
-fragment float4 fragmentScan(
-    Varying                in         [[stage_in]],
-    texture2d<float>       sceneTex   [[ texture(0) ]],
-    texture2d<float>       depthTex   [[ texture(1) ]],
-    constant ScanUniforms& uni        [[ buffer(4) ]])
-{
-    // 1. 读取原始场景颜色
-    constexpr sampler samp(coord::normalized, address::clamp_to_edge);
-    float4 sceneColor = sceneTex.sample(samp, in.uv);
+    // 线性化深度（假设 near = 0.1, far = 100.0）
+    float linearDepth = linearizeDepth(depth, 0.1, 100.0);
 
-    // 2. 读取深度值
-    float depth = depthTex.sample(samp, in.uv).r;
+    // 计算扫描位置
+    float scanPos = fmod(uniforms.time * uniforms.scanSpeed, uniforms.farPlane);
+    float scanDist = abs(linearDepth - scanPos); // 距离扫描前沿的距离
 
-    // 3. 计算与扫描位置的差值
-    //    fract 保证 uProgress 在 0→1 循环
-    float scanPos = fract(uni.uProgress);
-    float diff    = abs(depth - scanPos);
+    // 扫描效果：当距离小于宽度时，叠加扫描颜色
+    float scanEffect = smoothstep(uniforms.scanWidth, 0.0, scanDist);
+    float4 scanColor = float4(1.0, 0.0, 0.0, 1.0); // 扫描条颜色
 
-    // 4. 生成平滑的带状权重
-    float band = 1.0 - smoothstep(0.0, uni.bandWidth, diff);
-
-    // 5. 混合高亮色
-    float3 outRgb = mix(sceneColor.rgb,
-                        uni.highlightColor,
-                        band * uni.intensity);
-
-//    return float4(outRgb, sceneColor.a);
-//    return float4(1,1,0, 1);
-    return float4( sceneColor.rgb, 1);
-}
+    // 混合原始颜色和扫描颜色
+     return mix(color, scanColor, scanEffect * 0.5);
+    // return float4(depth,depth,depth,1);
+//    return color;
+ }
