@@ -68,6 +68,9 @@ void MTLEngine::initWindow() {
     // 设置键盘回调函数
     glfwSetKeyCallback(glfwWindow, keyCallback);  // 这里注册了键盘回调函数
     glfwSetCursorPosCallback(glfwWindow, mouseCallback);
+    
+    glfwSetInputMode(glfwWindow, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    
     int width, height;
     glfwGetFramebufferSize(glfwWindow, &width, &height);
     
@@ -298,14 +301,19 @@ void MTLEngine::keyCallback(GLFWwindow* window, int key, int scancode, int actio
         if (key == GLFW_KEY_DOWN) engine->camera->updateOrientation(xTemp,yTemp++);
         if (key == GLFW_KEY_LEFT) engine->camera->updateOrientation(xTemp--,yTemp);
         if (key == GLFW_KEY_RIGHT) engine->camera->updateOrientation(xTemp++,yTemp);
-
+        
+        if (key == GLFW_KEY_M) glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
+        if (key == GLFW_KEY_U) {
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        }
     }
 }
 
 void MTLEngine::mouseCallback(GLFWwindow* window, double xpos, double ypos) {
     MTLEngine* engine = static_cast<MTLEngine*>(glfwGetWindowUserPointer(window));
     if (engine && engine->camera) {
-        engine->camera->updateOrientation(xpos, ypos);
+        if (glfwGetInputMode(window, GLFW_CURSOR) == GLFW_CURSOR_DISABLED)
+            engine->camera->updateOrientation(xpos, ypos);
     }
 }
 
