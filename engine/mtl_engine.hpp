@@ -26,6 +26,10 @@
 #include "Texture.hpp"
 #include <stb/stb_image.h>
 
+#include "TextureArray.hpp"
+#include "mesh.hpp"
+#include "model.hpp"
+
 #include <filesystem>
 
 #include "AAPLMathUtilities.h"
@@ -43,10 +47,12 @@ private:
     void initDevice();
     void initWindow();
     
+    void loadMeshes();
     void createCube();
     void createBuffers();
     void createDefaultLibrary();
     void createCommandQueue();
+    void createModelRenderPipeline();
     void createRenderPipeline();
     void createLightSourceRenderPipeline();
     
@@ -83,6 +89,7 @@ private:
     MTL::Library* metalDefaultLibrary;
     MTL::CommandQueue* metalCommandQueue;
     MTL::CommandBuffer* metalCommandBuffer;
+    MTL::RenderPipelineState* modelRenderPSO;
     MTL::RenderPipelineState* metalRenderPSO;
     MTL::RenderPipelineState* metalLightSourceRenderPSO;
     
@@ -106,7 +113,8 @@ private:
     MTL::Texture* sceneTargetColorTexture; //offscreen目标颜色纹理
     int sampleCount = 4;
 
-
+    Model* model;
+    Mesh* mesh;
     Texture* grassTexture;
     
 };

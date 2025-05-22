@@ -45,10 +45,14 @@
 		BC4AAEE92D69D054001BD0C6 /* Exceptions for "eternal" folder in "Embed Libraries" phase from "engine" target */ = {
 			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
 			attributesByRelativePath = {
+				assimp/lib/libassimpd.5.4.3.dylib = (CodeSignOnCopy, );
+				assimp/lib/libassimpd.5.dylib = (CodeSignOnCopy, );
 				glfw/libglfw.3.4.dylib = (CodeSignOnCopy, );
 			};
 			buildPhase = BC4AAEE82D69D054001BD0C6 /* Embed Libraries */;
 			membershipExceptions = (
+				assimp/lib/libassimpd.5.4.3.dylib,
+				assimp/lib/libassimpd.5.dylib,
 				glfw/libglfw.3.4.dylib,
 			);
 		};
@@ -323,12 +327,15 @@
 				HEADER_SEARCH_PATHS = (
 					"$(SRCROOT)/metal-cpp",
 					/opt/homebrew/Cellar/glfw/3.4/include,
-					/Users/menji/coding/xcode/engineDemo/eternal,
+					"$(SRCROOT)/eternal",
+					"$(PROJECT_DIR)/eternal/assimp/include",
+					"$(PROJECT_DIR)/eternal/tinyobjloader",
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
 					/opt/homebrew/Cellar/glfw/3.4/lib,
 					"$(PROJECT_DIR)/eternal/glfw",
+					"$(PROJECT_DIR)/eternal/assimp/lib",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.1;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -348,12 +355,15 @@
 				HEADER_SEARCH_PATHS = (
 					"$(SRCROOT)/metal-cpp",
 					/opt/homebrew/Cellar/glfw/3.4/include,
-					/Users/menji/coding/xcode/engineDemo/eternal,
+					"$(SRCROOT)/eternal",
+					"$(PROJECT_DIR)/eternal/assimp/include",
+					"$(PROJECT_DIR)/eternal/tinyobjloader",
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
 					/opt/homebrew/Cellar/glfw/3.4/lib,
 					"$(PROJECT_DIR)/eternal/glfw",
+					"$(PROJECT_DIR)/eternal/assimp/lib",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.1;
 				PRODUCT_NAME = "$(TARGET_NAME)";
