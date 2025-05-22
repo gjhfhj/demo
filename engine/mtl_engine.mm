@@ -105,8 +105,6 @@ void MTLEngine::initWindow() {
 void MTLEngine::loadMeshes() {
     model = new Model("assets/SMG/smg.obj", metalDevice);
     std::cout << "Mesh Count: " << model->meshes.size() << std::endl;
-    
-    
 }
 
 void MTLEngine::createCube() {
