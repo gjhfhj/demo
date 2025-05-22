@@ -29,6 +29,7 @@
 #include "TextureArray.hpp"
 #include "mesh.hpp"
 #include "model.hpp"
+#include "camera.hpp"
 
 #include <filesystem>
 
@@ -78,7 +79,14 @@ private:
 
     static void frameBufferSizeCallback(GLFWwindow *window, int width, int height); //调整窗口大小时，
     void resizeFrameBuffer(int width, int height);                                  //解决metalLayer.drawableSize 的分辨率不会更新的问题
-    static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
+//    static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
+    
+    static void cursorPositionCallback(GLFWwindow* window, double x, double y);
+    void updateMousePosition(double x, double y);
+    static void scrollCallback(GLFWwindow* window, double xOffset, double yOffset);
+    void updateScrollPosition(double xOffset, double yOffset);
+    void processInput();
+    
     
     MTL::Device* metalDevice;
     GLFWwindow* glfwWindow;
@@ -117,4 +125,14 @@ private:
     Mesh* mesh;
     Texture* grassTexture;
     
+    
+    // Camera
+    Camera camera;
+    float lastX;
+    float lastY;
+    bool firstMouse = true;
+    
+    // Timing
+    float deltaTime = 0.0f;    // time between current frame and last frame
+    float lastFrame = 0.0f;
 };

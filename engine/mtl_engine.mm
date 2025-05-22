@@ -45,6 +45,7 @@ void MTLEngine::run(){
     while(!glfwWindowShouldClose(glfwWindow)){
 //        timer.update();
         @autoreleasepool {
+            processInput();
             metalDrawable = (__bridge CA::MetalDrawable*)[metalLayer nextDrawable];
             draw();
         }
@@ -86,6 +87,12 @@ void MTLEngine::initWindow() {
     
     glfwSetWindowUserPointer(glfwWindow, this);
     glfwSetFramebufferSizeCallback(glfwWindow, frameBufferSizeCallback);
+    glfwSetCursorPosCallback(glfwWindow, cursorPositionCallback);
+    glfwSetScrollCallback(glfwWindow, scrollCallback);
+    
+    // Tell GLFW to Capture our Mouse.
+    glfwSetInputMode(glfwWindow, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    
     int width, height;
     glfwGetFramebufferSize(glfwWindow, &width, &height);
     
@@ -711,10 +718,12 @@ void MTLEngine::encodeRenderCommand(MTL::RenderCommandEncoder* renderCommandEnco
     simd::float3 F = simd::float3 {0, 0,-1}; // Unit-Forward
     simd::float3 P = simd::float3 {0, 0, 1}; // Camera Position in World Space
 
-    matrix_float4x4 viewMatrix = matrix_make_rows(R.x, R.y, R.z, dot(-R, P),
-                                                 U.x, U.y, U.z, dot(-U, P),
-                                                -F.x,-F.y,-F.z, dot( F, P),
-                                                 0, 0, 0, 1);
+//    matrix_float4x4 viewMatrix = matrix_make_rows(R.x, R.y, R.z, dot(-R, P),
+//                                                 U.x, U.y, U.z, dot(-U, P),
+//                                                -F.x,-F.y,-F.z, dot( F, P),
+//                                                 0, 0, 0, 1);
+    float4x4 viewMatrix = camera.GetViewMatrix();
+    
 
     float aspectRatio = (metalLayer.frame.size.width / metalLayer.frame.size.height);
     float fov = 90 * (M_PI / 180.0f);
@@ -861,10 +870,79 @@ void MTLEngine::resizeFrameBuffer(int width, int height) {
     updateRenderPassDescriptor();
 }
 
-void MTLEngine::keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
-    if (action == GLFW_PRESS) {
-        if (key == GLFW_KEY_1) currentMode = kModeNormal;
-        else if (key == GLFW_KEY_2) currentMode = kModeScanFrag;
-        else if (key == GLFW_KEY_3) currentMode = kModeScnaComput;
+//void MTLEngine::keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+//    if (action == GLFW_PRESS) {
+//        if (key == GLFW_KEY_1) currentMode = kModeNormal;
+//        else if (key == GLFW_KEY_2) currentMode = kModeScanFrag;
+//        else if (key == GLFW_KEY_3) currentMode = kModeScnaComput;
+//    }
+//}
+
+void MTLEngine::processInput() {
+    if (glfwGetKey(glfwWindow, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+        glfwSetWindowShouldClose(glfwWindow, true);
+
+    float currentFrame = (float)glfwGetTime();
+    deltaTime = currentFrame - lastFrame;
+    lastFrame = currentFrame;
+    
+    if (glfwGetKey(glfwWindow, GLFW_KEY_W) == GLFW_PRESS)
+        camera.ProcessKeyboard(FORWARD, deltaTime);
+    if (glfwGetKey(glfwWindow, GLFW_KEY_S) == GLFW_PRESS)
+        camera.ProcessKeyboard(BACKWARD, deltaTime);
+    if (glfwGetKey(glfwWindow, GLFW_KEY_A) == GLFW_PRESS)
+        camera.ProcessKeyboard(LEFT, deltaTime);
+    if (glfwGetKey(glfwWindow, GLFW_KEY_D) == GLFW_PRESS)
+        camera.ProcessKeyboard(RIGHT, deltaTime);
+    
+    // Static preserves value across function calls :D
+    static bool altPressed = false;
+    if (!altPressed && glfwGetKey(glfwWindow, GLFW_KEY_LEFT_ALT) == GLFW_PRESS) {
+        altPressed = true;
+        if (glfwGetInputMode(glfwWindow, GLFW_CURSOR) == GLFW_CURSOR_DISABLED) {
+            glfwSetInputMode(glfwWindow, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+        } else {
+            glfwSetInputMode(glfwWindow, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+            glfwSetCursorPos(glfwWindow, lastX, lastY);
+        }
     }
+
+    if (glfwGetKey(glfwWindow, GLFW_KEY_LEFT_ALT) == GLFW_RELEASE) {
+        altPressed = false;
+    }
+}
+
+void MTLEngine::cursorPositionCallback(GLFWwindow* window, double x, double y) {
+    MTLEngine* engine = (MTLEngine*)glfwGetWindowUserPointer(window);
+    if (glfwGetInputMode(window, GLFW_CURSOR) == GLFW_CURSOR_DISABLED)
+        engine->updateMousePosition(x, y);
+}
+
+void MTLEngine::updateMousePosition(double x, double y) {
+    float xpos = (float)(x);
+    float ypos = (float)(y);
+
+    if (firstMouse)
+    {
+        lastX = xpos;
+        lastY = ypos;
+        firstMouse = false;
+    }
+
+    float xoffset = xpos - lastX;
+    float yoffset = lastY - ypos; // reversed since y-coordinates go from bottom to top
+
+    lastX = xpos;
+    lastY = ypos;
+
+    camera.ProcessMouseMovement(xoffset, yoffset);
+}
+
+void MTLEngine::scrollCallback(GLFWwindow *window, double xOffset, double yOffset) {
+    MTLEngine* engine = (MTLEngine*)glfwGetWindowUserPointer(window);
+    engine->updateScrollPosition(xOffset, yOffset);
+}
+
+void MTLEngine::updateScrollPosition(double xOffset, double yOffset) {
+    camera.ProcessMouseScroll((float)yOffset);
 }
