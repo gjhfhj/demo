@@ -23,10 +23,12 @@ void MTLEngine::init(){
     initWindow();
     timer.init();
     
+    loadMeshes();
     createCube();
     createBuffers();
     createDefaultLibrary();
     createCommandQueue();
+    createModelRenderPipeline();
     createRenderPipeline();
     createLightSourceRenderPipeline();
     createScanFragmentPipeline();
@@ -100,6 +102,10 @@ void MTLEngine::initWindow() {
 }
 
 
+void MTLEngine::loadMeshes() {
+    model = new Model("assets/SMG/smg.obj", metalDevice);
+    std::cout << "Mesh Count: " << model->meshes.size() << std::endl;
+}
 
 void MTLEngine::createCube() {
     // Cube for use in a right-handed coordinate system with triangle faces
@@ -229,6 +235,45 @@ void MTLEngine::createCommandQueue(){
     metalCommandQueue = metalDevice->newCommandQueue();
     
     printf("metalCommandQueue created.\n");
+}
+
+void MTLEngine::createModelRenderPipeline() {
+    MTL::Function* vertexShader = metalDefaultLibrary->newFunction(NS::String::string("modelVertexShader", NS::ASCIIStringEncoding));
+    assert(vertexShader); //assert() 检查 参数 是否为空，如果为空，表示创建管线描述符失败，会中断程序。
+    MTL::Function* fragmentShader = metalDefaultLibrary->newFunction(NS::String::string("modelFragmentShader", NS::ASCIIStringEncoding));
+    assert(fragmentShader);
+    
+    MTL::RenderPipelineDescriptor* renderPipelineDescriptor = MTL::RenderPipelineDescriptor::alloc()->init();
+//    renderPipelineDescriptor->setLabel(NS::String::string("Square Rendering Pipeline", NS::ASCIIStringEncoding));
+    renderPipelineDescriptor->setVertexFunction(vertexShader);
+    renderPipelineDescriptor->setFragmentFunction(fragmentShader);
+    assert(renderPipelineDescriptor);
+    
+    MTL::PixelFormat pixelFormat = (MTL::PixelFormat)metalLayer.pixelFormat;
+    renderPipelineDescriptor->colorAttachments()->object(0)->setPixelFormat(pixelFormat);
+    renderPipelineDescriptor->setSampleCount(4);
+    renderPipelineDescriptor->setLabel(NS::String::string("Model Render Pipeline", NS::ASCIIStringEncoding));
+    renderPipelineDescriptor->setDepthAttachmentPixelFormat(MTL::PixelFormatDepth32Float);
+    renderPipelineDescriptor->setTessellationOutputWindingOrder(MTL::WindingClockwise);
+
+    NS::Error* error;
+    modelRenderPSO = metalDevice->newRenderPipelineState(renderPipelineDescriptor, &error);
+    
+    if (metalRenderPSO == nil) {
+        std::cout<<"Error creating render pipeline state: "<< error << std::endl;
+        std::exit(0);
+    }
+    
+    //只是在这里创建了一个深度测试/写入的测试，非属于任何MTLRenderPipelineState对象。
+    MTL::DepthStencilDescriptor* depthStencilDescriptor = MTL::DepthStencilDescriptor::alloc()->init();
+    depthStencilDescriptor->setDepthCompareFunction(MTL::CompareFunctionLessEqual);
+    depthStencilDescriptor->setDepthWriteEnabled(true); //to allow the gpu to write to the depth buffe
+    depthStencilState = metalDevice->newDepthStencilState(depthStencilDescriptor);
+    
+//    depthStencilDescriptor->release();    //这个要吗？？？别的都配置了就release了
+    renderPipelineDescriptor->release();
+    vertexShader->release();
+    fragmentShader->release();
 }
 
 void MTLEngine::createRenderPipeline(){
@@ -694,6 +739,36 @@ void MTLEngine::encodeRenderCommand(MTL::RenderCommandEncoder* renderCommandEnco
     MTL::PrimitiveType typeTriangle = MTL::PrimitiveTypeTriangle;
 
     //       renderCommandEncoder->setTriangleFillMode(MTL::TriangleFillModeLines);
+    
+    // Model
+    
+    renderCommandEncoder->setRenderPipelineState(modelRenderPSO);
+    
+    MTL::SamplerDescriptor* samplerDescriptor = MTL::SamplerDescriptor::alloc()->init();
+    samplerDescriptor->setMinFilter(MTL::SamplerMinMagFilterLinear);
+    samplerDescriptor->setMipFilter(MTL::SamplerMipFilterLinear);
+    MTL::SamplerState* samplerState = metalDevice->newSamplerState(samplerDescriptor);
+    float3 cameraP = make_float3(0.0f,0.0f,0.0f);
+    for (Mesh* mesh : model->meshes)
+    {
+        renderCommandEncoder->setVertexBuffer(mesh->vertexBuffer, 0, 0);
+        renderCommandEncoder->setVertexBytes(&modelMatrix, sizeof(modelMatrix), 1);
+        renderCommandEncoder->setVertexBytes(&viewMatrix, sizeof(viewMatrix), 2);
+        renderCommandEncoder->setVertexBytes(&perspectiveMatrix, sizeof(perspectiveMatrix), 3);
+        renderCommandEncoder->setFragmentBytes(&lightColor, sizeof(lightColor), 0);
+        renderCommandEncoder->setFragmentBytes(&lightPosition, sizeof(lightPosition), 1);
+        renderCommandEncoder->setFragmentBytes(&cameraP, sizeof(float3), 2);
+        renderCommandEncoder->setFragmentTexture(model->textures->textureArray, 3);
+        renderCommandEncoder->setFragmentBuffer(model->textures->textureInfosBuffer, 0, 4);
+        renderCommandEncoder->setFragmentBytes(&modelMatrix, sizeof(modelMatrix), 5);
+        renderCommandEncoder->setFragmentSamplerState(samplerState, 6);
+        
+        renderCommandEncoder->drawIndexedPrimitives(typeTriangle, mesh->indexCount, MTL::IndexTypeUInt32, mesh->indexBuffer, 0);
+    
+    }
+    
+    
+    
     //cubePSO
     renderCommandEncoder->setFragmentBytes(&cubeColor, sizeof(cubeColor), 0);
     renderCommandEncoder->setFragmentBytes(&lightColor, sizeof(lightColor), 1);
